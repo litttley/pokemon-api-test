@@ -57,14 +57,11 @@ pub struct PokemonCsv {
     pub fairy_attack_effectiveness: f32,
 }
 
-fn from_capital_bool<'de, D>(
-    deserializer: D,
-) -> Result<bool, D::Error>
+fn from_capital_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
     D: de::Deserializer<'de>,
 {
-    let s: &str =
-        de::Deserialize::deserialize(deserializer)?;
+    let s: &str = de::Deserialize::deserialize(deserializer)?;
 
     match s {
         "True" => Ok(true),
@@ -73,14 +70,11 @@ where
     }
 }
 
-fn from_comma_separated<'de, D>(
-    deserializer: D,
-) -> Result<Vec<String>, D::Error>
+fn from_comma_separated<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: de::Deserializer<'de>,
 {
-    let s: &str =
-        de::Deserialize::deserialize(deserializer)?;
+    let s: &str = de::Deserialize::deserialize(deserializer)?;
 
     Ok(s.split(", ")
         .filter(|v| !v.is_empty())

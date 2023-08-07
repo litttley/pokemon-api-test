@@ -21,23 +21,21 @@ async fn main() -> eyre::Result<()> {
         .connect_timeout(Duration::from_secs(60 * 5))
         .connect(&database_url)
         .await
-        .suggestion("database urls must be in the form `mysql://username:password@host:port/database`")?;
+        .suggestion(
+            "database urls must be in the form `mysql://username:password@host:port/database`",
+        )?;
 
-    let mut rdr = csv::Reader::from_path(
-        "./crates/upload-pokemon-data/pokemon.csv",
-    )?;
+    let mut rdr = csv::Reader::from_path("./crates/upload-pokemon-data/pokemon.csv")?;
     let pokemon = rdr
         .deserialize()
         .collect::<Result<Vec<PokemonCsv>, csv::Error>>()?;
 
-    let mut pokemon_map: HashMap<String, PokemonId> =
-        HashMap::new();
+    let mut pokemon_map: HashMap<String, PokemonId> = HashMap::new();
 
     let mut tasks = FuturesUnordered::new();
 
     for record in pokemon.clone().into_iter().progress() {
-        let pokemon_row: PokemonTableRow =
-            record.clone().into();
+        let pokemon_row: PokemonTableRow = record.clone().into();
         tasks.push(tokio::spawn(insert_pokemon(
             pool.clone(),
             pokemon_row.clone(),
@@ -104,13 +102,11 @@ async fn main() -> eyre::Result<()> {
         .progress()
         .filter(|pokemon| pokemon.evolves_from.is_some())
     {
-        let name = pokemon.evolves_from.expect(
-            "Expected a value here since we just checked",
-        );
-        let pokemon_id =
-            pokemon_map.get(&pokemon.name).unwrap().clone();
-        let evolves_from_id =
-            pokemon_map.get(&name).unwrap().clone();
+        let name = pokemon
+            .evolves_from
+            .expect("Expected a value here since we just checked");
+        let pokemon_id = pokemon_map.get(&pokemon.name).unwrap().clone();
+        let evolves_from_id = pokemon_map.get(&name).unwrap().clone();
 
         let pool = pool.clone();
 
