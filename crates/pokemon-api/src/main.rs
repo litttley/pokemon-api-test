@@ -3,7 +3,7 @@ use aws_lambda_events::{
     event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyResponse},
 };
 use http::header::HeaderMap;
-use lambda_runtime::{handler_fn, Context, Error};
+use lambda_runtime::{service_fn, Error, LambdaEvent};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use serde_json::json;
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Error> {
         .connect(&database_url)
         .await?;
     POOL.get_or_init(|| pool);
-    let processor = handler_fn(handler);
+    let processor = service_fn(handler);
     lambda_runtime::run(processor).await?;
     Ok(())
 }
@@ -38,9 +38,10 @@ struct PokemonHp {
 
 #[instrument]
 async fn handler(
-    event: ApiGatewayProxyRequest,
-    _: Context,
+    event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
+    let (event, _context) = event.into_parts();
+
     let path = event.path.expect("expect there to always be an event path");
     let requested_pokemon = path.split("/").last();
     match requested_pokemon {
@@ -66,7 +67,7 @@ async fn handler(
                 r#"
 SELECT 
     id as "id!: PokemonId",
-    name,
+    name as "name!: String",
     hp,
     legendary_or_mythical as "legendary_or_mythical!: bool"
 FROM
@@ -100,16 +101,28 @@ mod tests {
         ApiGatewayProxyRequestContext, ApiGatewayRequestIdentity,
     };
     use http::Method;
+    use lambda_runtime::Context;
 
     use super::*;
 
     #[tokio::test]
     async fn handler_handles() {
+        let database_url = env::var("DATABASE_URL").unwrap();
+        let pool = MySqlPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url)
+            .await
+            .unwrap();
+        POOL.get_or_init(|| pool);
+
         let event = fake_request("/api/pokemon/bulbasaur".to_string());
 
         let fake_id = PokemonId::new();
+
         assert_eq!(
-            handler(event.clone(), Context::default()).await.unwrap(),
+            handler(LambdaEvent::new(event, Context::default()))
+                .await
+                .unwrap(),
             ApiGatewayProxyResponse {
                 status_code: 200,
                 headers: HeaderMap::new(),
@@ -132,7 +145,9 @@ mod tests {
     async fn handler_handles_empty_pokemon() {
         let event = fake_request("/api/pokemon//".to_string());
         assert_eq!(
-            handler(event.clone(), Context::default()).await.unwrap(),
+            handler(LambdaEvent::new(event, Context::default()))
+                .await
+                .unwrap(),
             ApiGatewayProxyResponse {
                 status_code: 400,
                 headers: HeaderMap::new(),
@@ -155,8 +170,8 @@ mod tests {
             http_method: Method::GET,
             headers: HeaderMap::new(),
             multi_value_headers: HeaderMap::new(),
-            query_string_parameters: HashMap::new(),
-            multi_value_query_string_parameters: HashMap::new(),
+            query_string_parameters: Default::default(),
+            multi_value_query_string_parameters: Default::default(),
             path_parameters: HashMap::new(),
             stage_variables: HashMap::new(),
             request_context: ApiGatewayProxyRequestContext {
